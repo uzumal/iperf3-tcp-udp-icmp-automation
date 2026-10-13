@@ -1,0 +1,66 @@
+{
+  "run_id": "HS-FAILURE-TEST-001",
+  "dashboard": {
+    "listen": "127.0.0.1",
+    "port": 8765,
+    "history_size": 90
+  },
+  "logging": {
+    "directory": "logs"
+  },
+  "monitor": {
+    "max_concurrency": 10,
+    "jitter_seconds": 0.05
+  },
+  "defaults": {
+    "interval_seconds": 3.0,
+    "timeout_seconds": 0.8
+  },
+  "iperf3": {
+    "executable": "C:\\Tools\\iperf3\\iperf3.exe",
+    "duration_seconds": 2,
+    "connect_timeout_ms": 800,
+    "tcp_bitrate": "1M",
+    "udp_bitrate": "1M",
+    "reverse": false
+  },
+  "probes": [
+    {
+      "id": "gateway_ping",
+      "name": "Gateway ICMP",
+      "type": "ping",
+      "host": "192.0.2.1"
+    },
+    {
+      "id": "server_a_tcp",
+      "name": "Server A TCP",
+      "type": "tcp",
+      "host": "192.0.2.20",
+      "port": 5201,
+      "bitrate": "1M"
+    },
+    {
+      "id": "server_a_udp",
+      "name": "Server A UDP",
+      "type": "udp",
+      "host": "192.0.2.20",
+      "port": 5202,
+      "bitrate": "1M"
+    },
+    {
+      "id": "server_b_tcp",
+      "name": "Server B TCP",
+      "type": "tcp",
+      "host": "192.0.2.30",
+      "port": 5201,
+      "bitrate": "1M"
+    },
+    {
+      "id": "disabled_sample",
+      "name": "Disabled sample",
+      "type": "ping",
+      "host": "192.0.2.99",
+      "enabled": false
+    }
+  ]
+}

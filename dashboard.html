@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hypershield Failure Test Monitor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #071019;
+      --panel: #101c27;
+      --panel-2: #142432;
+      --line: #263a49;
+      --text: #ecf4f7;
+      --muted: #8ea6b5;
+      --green: #25d695;
+      --red: #ff5f68;
+      --blue: #51a8ff;
+      --grey: #657987;
+      --shadow: 0 16px 44px rgba(0, 0, 0, .28);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 85% 0%, rgba(36, 109, 144, .22), transparent 32rem),
+        var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Yu Gothic UI", "Meiryo", sans-serif;
+    }
+
+    .shell { width: min(1500px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 50px; }
+    header { display: flex; justify-content: space-between; align-items: end; gap: 20px; margin-bottom: 18px; }
+    h1 { margin: 0; font-size: clamp(22px, 2.2vw, 34px); letter-spacing: -.03em; }
+    .eyebrow { color: var(--blue); font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 6px; }
+    .run-meta { color: var(--muted); font-family: Consolas, monospace; font-size: 12px; text-align: right; line-height: 1.7; }
+
+    .overall {
+      display: grid;
+      grid-template-columns: minmax(230px, 1fr) auto;
+      gap: 24px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-left: 8px solid var(--grey);
+      border-radius: 16px;
+      padding: 22px 24px;
+      background: linear-gradient(135deg, rgba(255,255,255,.035), transparent), var(--panel);
+      box-shadow: var(--shadow);
+      transition: border-color .2s, background .2s;
+    }
+    .overall.pass { border-left-color: var(--green); }
+    .overall.fail { border-left-color: var(--red); background-color: #23161d; }
+    .overall.pending { border-left-color: var(--grey); }
+    .overall-label { color: var(--muted); font-size: 13px; font-weight: 700; }
+    .overall-value { font-size: clamp(30px, 4vw, 55px); line-height: 1.05; font-weight: 800; margin-top: 5px; }
+    .overall-detail { color: var(--muted); margin-top: 8px; font-size: 13px; }
+    .phase-wrap { text-align: right; }
+    .phase { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); padding: 8px 12px; border-radius: 999px; background: rgba(0,0,0,.18); font-weight: 700; }
+    .phase-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 13px currentColor; }
+    .elapsed { margin-top: 8px; color: var(--muted); font-family: Consolas, monospace; }
+
+    .toolbar {
+      margin: 15px 0;
+      padding: 13px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      align-items: center;
+      background: rgba(16, 28, 39, .8);
+      border: 1px solid var(--line);
+      border-radius: 13px;
+    }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 10px 14px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .12s, border-color .12s, background .12s;
+    }
+    button:hover { transform: translateY(-1px); border-color: var(--blue); }
+    button.fault { border-color: rgba(255,95,104,.55); }
+    button.recovery { border-color: rgba(37,214,149,.55); }
+    button.end { margin-left: auto; color: var(--muted); }
+    .toolbar-note { color: var(--muted); font-size: 12px; margin-left: 4px; }
+
+    .summary { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 10px; margin: 15px 0; }
+    .metric { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+    .metric-name { color: var(--muted); font-size: 12px; }
+    .metric-value { font-size: 27px; font-weight: 800; margin-top: 4px; }
+    .metric.normal .metric-value { color: var(--green); }
+    .metric.failure .metric-value { color: var(--red); }
+
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 15px; overflow: hidden; box-shadow: var(--shadow); }
+    .panel-head { display: flex; justify-content: space-between; gap: 20px; padding: 17px 19px; border-bottom: 1px solid var(--line); }
+    .panel-head h2 { margin: 0; font-size: 16px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 13px; color: var(--muted); font-size: 11px; }
+    .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+    .legend .l-pass::before { background: var(--green); }
+    .legend .l-fail::before { background: var(--red); }
+    .legend .l-pending::before { background: var(--grey); }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 1120px; }
+    th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 11px 13px; border-bottom: 1px solid var(--line); background: rgba(0,0,0,.12); }
+    td { padding: 13px; border-bottom: 1px solid rgba(38,58,73,.72); font-size: 13px; vertical-align: middle; }
+    tr:last-child td { border-bottom: 0; }
+    tr:hover td { background: rgba(255,255,255,.018); }
+    .probe-name { font-weight: 750; white-space: nowrap; }
+    .probe-detail { color: var(--muted); font-size: 11px; margin-top: 4px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mono { font-family: Consolas, "SFMono-Regular", monospace; font-size: 12px; white-space: nowrap; }
+    .badge { display: inline-flex; align-items: center; justify-content: center; min-width: 83px; padding: 6px 8px; border-radius: 999px; border: 1px solid currentColor; font-size: 11px; font-weight: 800; }
+    .badge.pass { color: var(--green); background: rgba(37,214,149,.09); }
+    .badge.fail { color: var(--red); background: rgba(255,95,104,.09); }
+    .badge.pending { color: var(--grey); background: rgba(101,121,135,.09); }
+
+    .timeline { display: flex; width: 230px; height: 25px; gap: 2px; align-items: stretch; }
+    .tick { flex: 1 1 0; min-width: 2px; border-radius: 2px; background: var(--grey); opacity: .92; }
+    .tick.pass { background: var(--green); }
+    .tick.fail { background: var(--red); }
+    .tick.pending { background: var(--grey); }
+
+    .events { margin-top: 15px; }
+    .events-list { display: grid; }
+    .event { display: grid; grid-template-columns: 150px 130px 1fr; gap: 13px; padding: 11px 18px; border-bottom: 1px solid var(--line); font-size: 12px; }
+    .event:last-child { border-bottom: 0; }
+    .event-time { color: var(--muted); font-family: Consolas, monospace; }
+    .event-kind { font-weight: 750; color: var(--blue); }
+    .event-note { color: var(--text); }
+
+    .offline { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(7,16,25,.88); backdrop-filter: blur(8px); align-items: center; justify-content: center; text-align: center; }
+    .offline.show { display: flex; }
+    .offline-card { border: 1px solid var(--red); background: var(--panel); padding: 26px 32px; border-radius: 16px; box-shadow: var(--shadow); }
+    .offline-card strong { display: block; font-size: 24px; color: var(--red); margin-bottom: 7px; }
+    footer { display: flex; justify-content: space-between; gap: 15px; color: var(--muted); font-size: 11px; margin-top: 14px; }
+
+    @media (max-width: 850px) {
+      .shell { width: min(100% - 20px, 1500px); padding-top: 17px; }
+      header, .overall { grid-template-columns: 1fr; display: grid; align-items: start; }
+      .run-meta, .phase-wrap { text-align: left; }
+      .summary { grid-template-columns: 1fr; }
+      button.end { margin-left: 0; }
+      .event { grid-template-columns: 1fr; gap: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <div class="eyebrow">Failure Test Telemetry</div>
+        <h1>Hypershield 通信監視</h1>
+      </div>
+      <div class="run-meta">
+        <div>RUN <span id="run-id">---</span></div>
+        <div>開始 <span id="started-at">---</span></div>
+      </div>
+    </header>
+
+    <section class="overall pending" id="overall">
+      <div>
+        <div class="overall-label">全体の通信状態</div>
+        <div class="overall-value" id="overall-value">判定待ち</div>
+        <div class="overall-detail" id="overall-detail">最初の通信結果を待っています</div>
+      </div>
+      <div class="phase-wrap">
+        <div class="phase"><span class="phase-dot"></span><span id="phase">正常性確認</span></div>
+        <div class="elapsed" id="elapsed">00:00:00</div>
+      </div>
+    </section>
+
+    <nav class="toolbar" aria-label="試験イベント記録">
+      <button data-marker="baseline">正常確認</button>
+      <button class="fault" data-marker="fault_start">障害開始を記録</button>
+      <button class="recovery" data-marker="recovery_start">復旧操作を記録</button>
+      <button data-marker="note">メモ追加</button>
+      <span class="toolbar-note">スイッチ操作は行わず、証跡に時刻だけ記録します。</span>
+      <button class="end" data-marker="test_end">試験終了を記録</button>
+    </nav>
+
+    <section class="summary">
+      <div class="metric normal"><div class="metric-name">通信成立</div><div class="metric-value" id="count-pass">0</div></div>
+      <div class="metric failure"><div class="metric-name">通信不成立</div><div class="metric-value" id="count-fail">0</div></div>
+      <div class="metric"><div class="metric-name">未判定</div><div class="metric-value" id="count-pending">0</div></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>通信状態</h2>
+        <div class="legend">
+          <span class="l-pass">通信成立</span>
+          <span class="l-fail">通信不成立</span>
+          <span class="l-pending">未判定</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>試験名</th>
+              <th>方式</th>
+              <th>状態</th>
+              <th>測定値</th>
+              <th>連続不通</th>
+              <th>不通時間</th>
+              <th>疎通率</th>
+              <th>直近履歴</th>
+              <th>最終変化</th>
+            </tr>
+          </thead>
+          <tbody id="probe-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel events">
+      <div class="panel-head"><h2>手動操作マーカー</h2></div>
+      <div class="events-list" id="events-list"><div class="event"><span class="event-note">まだ記録はありません。</span></div></div>
+    </section>
+
+    <footer>
+      <span>表示更新: 1秒間隔／通信結果はVMのローカルCSVへ逐次保存</span>
+      <span id="last-refresh">---</span>
+    </footer>
+  </div>
+
+  <div class="offline" id="offline">
+    <div class="offline-card">
+      <strong>監視プロセスへ接続できません</strong>
+      <span>画面は自動的に再接続します。ローカルのPythonプロセスを確認してください。</span>
+    </div>
+  </div>
+
+  <script>
+    const labels = {
+      overall: { pass: "全通信成立", fail: "通信不成立あり", pending: "判定待ち" },
+      evaluation: { pass: "通信成立", fail: "通信不成立", pending: "未判定" },
+      observed: { up: "疎通", down: "不通", unknown: "未確認" },
+      phase: { baseline: "正常性確認", fault: "障害中", recovery: "復旧確認", complete: "試験終了" },
+      marker: { baseline: "正常確認", fault_start: "障害開始", recovery_start: "復旧操作", note: "メモ", test_end: "試験終了" }
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char]));
+    const localTime = (value) => value ? new Date(value).toLocaleString("ja-JP", { hour12: false }) : "---";
+    const shortTime = (value) => value ? new Date(value).toLocaleTimeString("ja-JP", { hour12: false }) : "---";
+    const duration = (seconds) => {
+      const total = Math.max(0, Math.floor(Number(seconds) || 0));
+      const h = String(Math.floor(total / 3600)).padStart(2, "0");
+      const m = String(Math.floor((total % 3600) / 60)).padStart(2, "0");
+      const s = String(total % 60).padStart(2, "0");
+      return `${h}:${m}:${s}`;
+    };
+    const latency = (value) => value == null ? "---" : `${Number(value).toFixed(value < 10 ? 1 : 0)} ms`;
+    const rate = (value) => {
+      if (value == null || !Number.isFinite(Number(value))) return "---";
+      const bps = Number(value);
+      if (bps >= 1e9) return `${(bps / 1e9).toFixed(2)} Gbps`;
+      if (bps >= 1e6) return `${(bps / 1e6).toFixed(2)} Mbps`;
+      if (bps >= 1e3) return `${(bps / 1e3).toFixed(1)} Kbps`;
+      return `${bps.toFixed(0)} bps`;
+    };
+    const percent = (value) => value == null ? "---" : `${Number(value).toFixed(1)}%`;
+    const protocolName = (protocol) => {
+      const value = String(protocol || "").toLowerCase();
+      if (value === "ping" || value === "icmp") return "通常Ping";
+      if (value === "tcp") return "iperf3 TCP";
+      if (value === "udp") return "iperf3 UDP";
+      return value ? value.toUpperCase() : "---";
+    };
+    const measurement = (probe) => {
+      const protocol = String(probe.protocol || "").toLowerCase();
+      if (protocol === "ping" || protocol === "icmp") return latency(probe.latency_ms);
+      if (protocol === "udp") {
+        const throughput = rate(probe.throughput_bps);
+        const loss = probe.loss_percent == null ? null : `損失 ${percent(probe.loss_percent)}`;
+        return [throughput, loss].filter((value) => value && value !== "---").join(" / ") || "---";
+      }
+      if (protocol === "tcp") return rate(probe.throughput_bps);
+      return latency(probe.latency_ms);
+    };
+    const stateKey = (item) => {
+      if (["pass", "fail", "pending"].includes(item.evaluation)) return item.evaluation;
+      return ({ up: "pass", down: "fail", unknown: "pending" })[item.observed] || "pending";
+    };
+
+    function renderTimeline(history) {
+      return (history || []).map((sample) => {
+        const status = stateKey(sample);
+        const observed = labels.observed[sample.observed] || "未確認";
+        const title = `${localTime(sample.timestamp_utc)} / ${labels.evaluation[status]} / 実測: ${observed}`;
+        return `<span class="tick ${escapeHtml(status)}" title="${escapeHtml(title)}"></span>`;
+      }).join("");
+    }
+
+    function renderProbes(probes) {
+      $("probe-body").innerHTML = (probes || []).map((probe) => {
+        const passRate = probe.pass_rate == null ? "---" : percent(probe.pass_rate);
+        const downTime = probe.down_seconds > 0 ? duration(probe.down_seconds) : "---";
+        const evaluation = stateKey(probe);
+        const observed = labels.observed[probe.observed] || "未確認";
+        return `
+          <tr>
+            <td><div class="probe-name">${escapeHtml(probe.name)}</div><div class="probe-detail" title="${escapeHtml(probe.detail)}">${escapeHtml(probe.target)} · ${escapeHtml(probe.detail)}</div></td>
+            <td class="mono">${escapeHtml(protocolName(probe.protocol))}</td>
+            <td><span class="badge ${escapeHtml(evaluation)}" title="実測: ${escapeHtml(observed)}">${labels.evaluation[evaluation]}</span></td>
+            <td class="mono">${escapeHtml(measurement(probe))}</td>
+            <td class="mono">${Number(probe.consecutive_down) || 0} 回</td>
+            <td class="mono">${downTime}</td>
+            <td class="mono">${passRate}</td>
+            <td><div class="timeline">${renderTimeline(probe.history)}</div></td>
+            <td class="mono">${shortTime(probe.last_change_at)}</td>
+          </tr>`;
+      }).join("");
+    }
+
+    function renderMarkers(markers) {
+      if (!markers.length) {
+        $("events-list").innerHTML = '<div class="event"><span class="event-note">まだ記録はありません。</span></div>';
+        return;
+      }
+      $("events-list").innerHTML = markers.slice(0, 12).map((event) => `
+        <div class="event">
+          <span class="event-time">${escapeHtml(localTime(event.timestamp_utc))}</span>
+          <span class="event-kind">${escapeHtml(labels.marker[event.kind] || event.kind)}</span>
+          <span class="event-note">${escapeHtml(event.note || "---")}</span>
+        </div>`).join("");
+    }
+
+    function render(data) {
+      const summary = data.summary || data.counts || {};
+      const overallStatus = ["pass", "fail", "pending"].includes(data.overall)
+        ? data.overall
+        : summary.fail > 0
+          ? "fail"
+          : summary.pending > 0 || !(summary.pass > 0)
+            ? "pending"
+            : "pass";
+      const overall = $("overall");
+      overall.className = `overall ${overallStatus}`;
+      $("overall-value").textContent = labels.overall[overallStatus];
+      $("overall-detail").textContent = overallStatus === "fail"
+        ? "通信が成立していない対象があります。"
+        : overallStatus === "pass"
+          ? "すべての対象で通信が成立しています。"
+          : "最初の通信結果を待っています。";
+      $("run-id").textContent = data.run_id;
+      $("started-at").textContent = localTime(data.started_at);
+      $("phase").textContent = labels.phase[data.phase] || data.phase;
+      $("elapsed").textContent = duration(data.elapsed_seconds);
+      $("count-pass").textContent = summary.pass || 0;
+      $("count-fail").textContent = summary.fail || 0;
+      $("count-pending").textContent = summary.pending || 0;
+      renderProbes(data.probes);
+      renderMarkers(data.markers);
+      $("last-refresh").textContent = `最終更新 ${new Date().toLocaleTimeString("ja-JP", { hour12: false })}`;
+    }
+
+    async function refresh() {
+      try {
+        const response = await fetch("/api/status", { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        render(await response.json());
+        $("offline").classList.remove("show");
+      } catch (error) {
+        $("offline").classList.add("show");
+      }
+    }
+
+    async function addMarker(kind) {
+      let note = "";
+      if (kind === "note") {
+        note = window.prompt("記録するメモを入力してください。", "") || "";
+        if (!note) return;
+      } else {
+        const defaultNotes = {
+          baseline: "正常性確認を開始",
+          fault_start: "Smart Switch側の障害操作を開始",
+          recovery_start: "Smart Switch側の復旧操作を開始",
+          test_end: "試験終了"
+        };
+        note = defaultNotes[kind] || "";
+        if (!window.confirm(`${labels.marker[kind]}の時刻を記録しますか？`)) return;
+      }
+      const response = await fetch("/api/marker", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, note })
+      });
+      if (!response.ok) {
+        window.alert("マーカーを記録できませんでした。");
+      }
+      await refresh();
+    }
+
+    document.querySelectorAll("[data-marker]").forEach((button) => {
+      button.addEventListener("click", () => addMarker(button.dataset.marker));
+    });
+    refresh();
+    setInterval(refresh, 1000);
+  </script>
+</body>
+</html>
